@@ -30,7 +30,7 @@ module emu
 	input         RESET,
 
 	//Must be passed to hps_io module
-	inout  [45:0] HPS_BUS,
+	inout  [48:0] HPS_BUS,
 
 	//Base video clock. Usually equals to CLK_SYS.
 	output        CLK_VIDEO,
@@ -53,13 +53,14 @@ module emu
 	output        VGA_F1,
 	output [1:0]  VGA_SL,
 	output        VGA_SCALER, // Force VGA scaler
+	output        VGA_DISABLE, // analog out is off
 
 	input  [11:0] HDMI_WIDTH,
 	input  [11:0] HDMI_HEIGHT,
 	output        HDMI_FREEZE,
 
 `ifdef MISTER_FB
-	// Use framebuffer in DDRAM (USE_FB=1 in qsf)
+	// Use framebuffer in DDRAM
 	// FB_FORMAT:
 	//    [2:0] : 011=8bpp(palette) 100=16bpp 101=24bpp 110=32bpp
 	//    [3]   : 0=16bits 565 1=16bits 1555
@@ -179,6 +180,7 @@ assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 
 assign VGA_F1    = 0;
 assign VGA_SCALER= 0;
+assign VGA_DISABLE = 0;
 assign USER_OUT  = '1;
 assign LED_USER  = ioctl_download;
 assign LED_DISK  = 0;
@@ -193,7 +195,7 @@ wire [1:0] ar = status[20:19];
 assign VIDEO_ARX = (!ar) ? ((status[2] |landscape ) ? 8'd8 : 8'd7) : (ar - 1'd1);
 assign VIDEO_ARY = (!ar) ? ((status[2] |landscape ) ? 8'd7 : 8'd8) : 12'd0;
 
-`include "build_id.v" 
+`include "build_id.v"
 localparam CONF_STR = {
 	"A.SCRMBL;;",
 	"H0OJK,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
@@ -237,13 +239,13 @@ reg ce_6p, ce_6n, ce_12, ce_1p79;
 always @(posedge clk_sys) begin
 	reg [1:0] div = 0;
 	reg [3:0] div179 = 0;
-	
+
 	div <= div + 1'd1;
 
 	ce_12 <= div[0];
 	ce_6p <= div[0] & ~div[1];
 	ce_6n <= div[0] &  div[1];
-	
+
    ce_1p79 <= 0;
    div179 <= div179 - 1'd1;
    if(!div179) begin
@@ -258,6 +260,7 @@ wire [31:0] status;
 wire  [1:0] buttons;
 wire        forced_scandoubler;
 wire        direct_video;
+wire        video_rotated;
 
 wire        ioctl_download;
 wire        ioctl_upload;
@@ -288,6 +291,7 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 	.forced_scandoubler(forced_scandoubler),
 	.gamma_bus(gamma_bus),
 	.direct_video(direct_video),
+	.video_rotated(video_rotated),
 
 	.ioctl_upload(ioctl_upload),
 	.ioctl_upload_req(ioctl_upload_req),
@@ -304,7 +308,7 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 
 	.spinner_0(sp1),
 	.spinner_1(sp2)
-	
+
 );
 
 
@@ -369,7 +373,7 @@ always @(posedge clk_sys) begin
 
 	old_sp1 <= sp1;
 	old_sp2 <= sp2;
-	
+
 	if(old_sp1 != sp1) sp_sel <= 0;
 	if(old_sp2 != sp2) sp_sel <= 1;
 
@@ -402,7 +406,7 @@ always @(posedge clk_sys) if (ioctl_wr & (ioctl_index==1)) mod <= ioctl_dout;
 
 // load the DIPS
 reg [7:0] sw[8];
-always @(posedge clk_sys) if (ioctl_wr && (ioctl_index==254) && !ioctl_addr[24:3]) sw[ioctl_addr[2:0]] <= ioctl_dout; 
+always @(posedge clk_sys) if (ioctl_wr && (ioctl_index==254) && !ioctl_addr[24:3]) sw[ioctl_addr[2:0]] <= ioctl_dout;
 
 reg       landscape;
 reg       has_spinner;
@@ -546,7 +550,7 @@ always @(*) begin
 				input0 = status[7] ? ~{ m_coin, 1'b0, m_left1, m_right1, m_down1, m_up1, 1'b0, m_start1 } :
 						~{ m_coin, 1'b0, m_left, m_right, m_down, m_up, 1'b0, m_start1 };
 				input1 = status[7] ? ~{ 2'b00, m_left2, m_right2, m_down2, m_up2, 2'b00 } :
-						status[6] ? ~{ 2'b00, m_left, m_right, m_down, m_up, 2'b00 } : 
+						status[6] ? ~{ 2'b00, m_left, m_right, m_down, m_up, 2'b00 } :
 						~{ 2'b00, m_fire_d, m_fire_a, m_fire_b, m_fire_c, 2'b00 };
 				input2 = ~{ 1'b0, m_start2, 2'b00, 3'b000, m_start1 };
 			end
@@ -557,7 +561,7 @@ always @(*) begin
 				input0 = status[7] ? ~{ m_coin, 1'b0, m_left1, m_right1, m_down1, m_up1, 1'b0, m_start1 } :
 						~{ m_coin, 1'b0, m_left, m_right, m_down, m_up, 1'b0, m_start1 };
 				input1 = status[7] ? ~{ 2'b00, m_left2, m_right2, m_down2, m_up2, 2'b00 } :
-						status[6] ? ~{ 2'b00, m_left, m_right, m_down, m_up, 2'b00 } : 
+						status[6] ? ~{ 2'b00, m_left, m_right, m_down, m_up, 2'b00 } :
 						~{ 2'b00, m_fire_d, m_fire_a, m_fire_b, m_fire_c, 2'b00 };
 				input2 = ~{ 1'b0, m_start2, 2'b00, 3'b000, m_start1 };
 			end
@@ -590,7 +594,7 @@ always @(posedge clk_sys) begin
 	if(m_right|m_down|m_spcw) moon_dial_dir <= 0;
 end
 
-wire [5:0] dp_remap[64] = 
+wire [5:0] dp_remap[64] =
 '{
 	6'h03, 6'h02, 6'h00, 6'h01, 6'h21, 6'h20, 6'h22, 6'h23,
 	6'h33, 6'h32, 6'h30, 6'h31, 6'h11, 6'h10, 6'h12, 6'h13,
@@ -599,7 +603,7 @@ wire [5:0] dp_remap[64] =
 	6'h1b, 6'h1a, 6'h18, 6'h19, 6'h39, 6'h38, 6'h3a, 6'h3b,
 	6'h2b, 6'h2a, 6'h28, 6'h29, 6'h09, 6'h08, 6'h0a, 6'h0b,
 	6'h0f, 6'h0e, 6'h0c, 6'h0d, 6'h2d, 6'h2c, 6'h2e, 6'h2f,
-	6'h27, 6'h26, 6'h24, 6'h25, 6'h05, 6'h04, 6'h06, 6'h07 
+	6'h27, 6'h26, 6'h24, 6'h25, 6'h05, 6'h04, 6'h06, 6'h07
 };
 
 wire [5:0] darkplnt_dial = dp_remap[dp_remap_addr];
@@ -629,6 +633,7 @@ wire			fg = |{r,g,b};
 wire [23:0] rgb_in = (fg && !bg_a) ? {r,g,b} : {bg_r,bg_g,bg_b};
 
 wire rotate_ccw = status[8];
+wire flip = 0;
 
 screen_rotate screen_rotate (.*);
 
@@ -718,7 +723,7 @@ reg  [7:0] bg_r,bg_g,bg_b,bg_a;
 always @(posedge clk_sys) begin
 	reg old_vs;
 	reg use_bg = 0;
-	
+
 	if(bg_download && sdram_sz[2:0]) use_bg <= 1;
 
 	pic_req <= 0;
@@ -728,14 +733,14 @@ always @(posedge clk_sys) begin
 			old_vs <= vs;
 			{bg_a,bg_b,bg_g,bg_r} <= pic_data;
 			if(~(hblank|vblank)) begin
-			   if (status[8]) 
+			   if (status[8])
 					pic_addr <= pic_addr - 2'd2;
 				else
 					pic_addr <= pic_addr + 2'd2;
-				
+
 				pic_req <= 1;
 			end
-			
+
 			if(~old_vs & vs) begin
 				if (status[8])
 					pic_addr <= 'h1C000;
